@@ -21,6 +21,6 @@ jobs:
         key: ${{ secrets.DIGITALOCEAN_SSH_KEY }}
         port: ${{ secrets.DIGITALOCEAN_PORT }}
         script: |
-          cd /var/www/glimvue.com/yaodi/
+          cd /var/www/glimvue/yaodi/
           git pull origin main
           echo "部署完成！" 
