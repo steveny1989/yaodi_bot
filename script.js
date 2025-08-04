@@ -98,6 +98,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                 } else if (data.type === 'finished') {
                                     // 流式响应完成，获取message_id
                                     messageId = data.message_id;
+                                    console.log('流式响应完成，message_id:', messageId);
                                 } else if (data.type === 'error') {
                                     // 处理错误
                                     updateMessage(botMessagePlaceholder, data.content);
@@ -115,6 +116,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // 如果非静音状态且有message_id，获取音频
             if (!isMuted && messageId) {
+                console.log('开始获取音频，message_id:', messageId);
                 try {
                     const audioResponse = await fetch(audioApiUrl, {
                         method: 'POST',
@@ -124,18 +126,30 @@ document.addEventListener('DOMContentLoaded', () => {
                         body: JSON.stringify({ message_id: messageId })
                     });
 
+                    console.log('音频API响应状态:', audioResponse.status);
+
                     if (audioResponse.ok) {
                         const audioData = await audioResponse.json();
+                        console.log('音频API响应数据:', audioData);
+                        
                         if (audioData.audio_url) {
                             const audio = new Audio(audioData.audio_url);
                             audio.play().catch(error => {
                                 console.log('音频播放失败:', error);
                             });
+                        } else {
+                            console.log('音频API返回成功但没有audio_url');
                         }
+                    } else {
+                        console.log('音频API请求失败:', audioResponse.status, audioResponse.statusText);
+                        const errorText = await audioResponse.text();
+                        console.log('错误详情:', errorText);
                     }
                 } catch (audioError) {
                     console.log('获取音频失败:', audioError);
                 }
+            } else {
+                console.log('跳过音频获取:', { isMuted, messageId });
             }
 
         } catch (error) {
