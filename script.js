@@ -1,9 +1,9 @@
 document.addEventListener('DOMContentLoaded', () => {
     // 请将此URL替换为你正在运行的服务器地址和端口
     // 例如：'http://127.0.0.1:5002/api/chat'
-    const apiUrl = 'https://yaodi-bot.thinkboxs.com/api/chat';
+    const apiUrl = 'https://yaodi-bot.thinkboxs.com/api/chat/stream';
     const audioApiUrl = 'https://yaodi-bot.thinkboxs.com/api/audio';
-    //const apiUrl = 'http://127.0.0.1:5002/api/chat';
+    //const apiUrl = 'http://127.0.0.1:5002/api/chat/stream';
     const chatHistory = document.getElementById('chat-history');
     const userInput = document.getElementById('user-input');
     const sendButton = document.getElementById('send-button');
@@ -58,7 +58,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // 显示AI正在思考的动态指示器
             const botMessagePlaceholder = appendTypingIndicator();
 
-            // 第一步：发送请求到API获取文字回复
+            // 使用流式API获取实时回复
             const response = await fetch(apiUrl, {
                 method: 'POST',
                 headers: {
@@ -72,20 +72,56 @@ document.addEventListener('DOMContentLoaded', () => {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
 
-            const data = await response.json();
-            
-            // 更新占位符为AI的实际回复文本
-            updateMessage(botMessagePlaceholder, data.response);
+            // 处理流式响应
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let fullResponse = "";
+            let messageId = null;
 
-            // 第二步：如果非静音状态，获取音频
-            if (!isMuted && data.message_id) {
+            try {
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    const chunk = decoder.decode(value);
+                    const lines = chunk.split('\n');
+
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            try {
+                                const data = JSON.parse(line.slice(6));
+                                
+                                if (data.type === 'text') {
+                                    // 实时更新文字内容
+                                    fullResponse += data.content;
+                                    updateMessage(botMessagePlaceholder, fullResponse);
+                                } else if (data.type === 'finished') {
+                                    // 流式响应完成，获取message_id
+                                    messageId = data.message_id;
+                                } else if (data.type === 'error') {
+                                    // 处理错误
+                                    updateMessage(botMessagePlaceholder, data.content);
+                                    return;
+                                }
+                            } catch (e) {
+                                console.log('解析流式数据失败:', e);
+                            }
+                        }
+                    }
+                }
+            } finally {
+                reader.releaseLock();
+            }
+
+            // 如果非静音状态且有message_id，获取音频
+            if (!isMuted && messageId) {
                 try {
                     const audioResponse = await fetch(audioApiUrl, {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json'
                         },
-                        body: JSON.stringify({ message_id: data.message_id })
+                        body: JSON.stringify({ message_id: messageId })
                     });
 
                     if (audioResponse.ok) {
