@@ -2,6 +2,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // 请将此URL替换为你正在运行的服务器地址和端口
     // 例如：'http://127.0.0.1:5002/api/chat'
     const apiUrl = 'https://yaodi-bot.thinkboxs.com/api/chat';
+    const audioApiUrl = 'https://yaodi-bot.thinkboxs.com/api/audio';
     //const apiUrl = 'http://127.0.0.1:5002/api/chat';
     const chatHistory = document.getElementById('chat-history');
     const userInput = document.getElementById('user-input');
@@ -57,7 +58,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // 显示AI正在思考的动态指示器
             const botMessagePlaceholder = appendTypingIndicator();
 
-            // 发送请求到API
+            // 第一步：发送请求到API获取文字回复
             const response = await fetch(apiUrl, {
                 method: 'POST',
                 headers: {
@@ -76,12 +77,29 @@ document.addEventListener('DOMContentLoaded', () => {
             // 更新占位符为AI的实际回复文本
             updateMessage(botMessagePlaceholder, data.response);
 
-            // --- 音频播放（根据静音状态） ---
-            if (data.audio_url && !isMuted) {
-                const audio = new Audio(data.audio_url);
-                audio.play().catch(error => {
-                    console.log('音频播放失败:', error);
-                });
+            // 第二步：如果非静音状态，获取音频
+            if (!isMuted && data.message_id) {
+                try {
+                    const audioResponse = await fetch(audioApiUrl, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ message_id: data.message_id })
+                    });
+
+                    if (audioResponse.ok) {
+                        const audioData = await audioResponse.json();
+                        if (audioData.audio_url) {
+                            const audio = new Audio(audioData.audio_url);
+                            audio.play().catch(error => {
+                                console.log('音频播放失败:', error);
+                            });
+                        }
+                    }
+                } catch (audioError) {
+                    console.log('获取音频失败:', audioError);
+                }
             }
 
         } catch (error) {
