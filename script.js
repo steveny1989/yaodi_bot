@@ -11,6 +11,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 静音状态管理
     let isMuted = localStorage.getItem('chatMuted') === 'true';
+    let hasUserInteracted = false; // 跟踪用户是否已交互
     
     // 初始化静音状态
     function initializeMuteState() {
@@ -39,6 +40,7 @@ document.addEventListener('DOMContentLoaded', () => {
         isMuted = !isMuted;
         localStorage.setItem('chatMuted', isMuted.toString());
         updateMuteButton();
+        hasUserInteracted = true; // 标记用户已交互
     }
 
     // 备用头像的SVG数据
@@ -48,6 +50,9 @@ document.addEventListener('DOMContentLoaded', () => {
     async function sendMessage() {
         const message = userInput.value.trim();
         if (message === '') return;
+
+        // 标记用户已交互
+        hasUserInteracted = true;
 
         // 在聊天历史中显示用户消息
         appendMessage(message, 'user');
@@ -94,8 +99,8 @@ document.addEventListener('DOMContentLoaded', () => {
                                 updateMessage(botMessagePlaceholder, fullResponse);
                             } else if (data.type === 'finished') {
                                 messageId = data.message_id;
-                                // 如果非静音状态，处理音频生成
-                                if (!isMuted && messageId) {
+                                // 如果非静音状态且用户已交互，处理音频生成
+                                if (!isMuted && messageId && hasUserInteracted) {
                                     generateAudio(messageId, fullResponse);
                                 }
                             } else if (data.type === 'error') {
@@ -114,7 +119,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // 生成音频的函数
+    // 生成音频的函数 - 增强移动端兼容性
     async function generateAudio(messageId, textContent = null) {
         try {
             const requestBody = { message_id: messageId };
@@ -133,10 +138,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (audioResponse.ok) {
                 const audioData = await audioResponse.json();
                 if (audioData.audio_url) {
-                    const audio = new Audio(audioData.audio_url);
-                    audio.play().catch(error => {
-                        console.log('音频播放失败:', error);
-                    });
+                    await playAudioWithMobileSupport(audioData.audio_url);
                 }
             } else {
                 console.error('音频API响应状态:', audioResponse.status);
@@ -147,6 +149,88 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (error) {
             console.error('音频生成失败:', error);
         }
+    }
+
+    // 增强的音频播放函数，支持移动端
+    async function playAudioWithMobileSupport(audioUrl) {
+        try {
+            const audio = new Audio();
+            
+            // 设置音频属性以改善移动端兼容性
+            audio.preload = 'auto';
+            audio.volume = 0.8; // 设置适中的音量
+            
+            // 监听音频加载完成
+            audio.addEventListener('canplaythrough', () => {
+                console.log('音频加载完成，准备播放');
+            });
+            
+            // 监听播放开始
+            audio.addEventListener('play', () => {
+                console.log('音频开始播放');
+            });
+            
+            // 监听播放错误
+            audio.addEventListener('error', (e) => {
+                console.error('音频播放错误:', e);
+            });
+            
+            // 设置音频源
+            audio.src = audioUrl;
+            
+            // 尝试播放音频
+            const playPromise = audio.play();
+            
+            if (playPromise !== undefined) {
+                await playPromise;
+                console.log('音频播放成功');
+            }
+            
+        } catch (error) {
+            console.error('音频播放失败:', error);
+            
+            // 如果是自动播放策略错误，尝试用户交互后播放
+            if (error.name === 'NotAllowedError') {
+                console.log('自动播放被阻止，需要用户交互');
+                // 可以在这里添加一个提示，告诉用户点击屏幕来启用音频
+                showAudioPermissionHint();
+            }
+        }
+    }
+
+    // 显示音频权限提示
+    function showAudioPermissionHint() {
+        // 创建一个临时的提示元素
+        const hint = document.createElement('div');
+        hint.style.cssText = `
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 15px 20px;
+            border-radius: 8px;
+            font-size: 14px;
+            z-index: 1000;
+            text-align: center;
+        `;
+        hint.textContent = '点击屏幕任意位置启用音频播放';
+        document.body.appendChild(hint);
+        
+        // 3秒后自动移除提示
+        setTimeout(() => {
+            if (hint.parentNode) {
+                hint.parentNode.removeChild(hint);
+            }
+        }, 3000);
+        
+        // 点击提示时移除
+        hint.addEventListener('click', () => {
+            if (hint.parentNode) {
+                hint.parentNode.removeChild(hint);
+            }
+        });
     }
 
     // 将消息添加到聊天历史中
@@ -223,4 +307,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
     muteButton.addEventListener('click', toggleMute);
+    
+    // 添加页面点击事件来启用音频
+    document.addEventListener('click', () => {
+        hasUserInteracted = true;
+    }, { once: true });
 });
